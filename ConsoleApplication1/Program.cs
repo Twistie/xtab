@@ -11,23 +11,25 @@ namespace ConsoleApplication1
     class Program
     {
 
-        struct record
+        struct recordBlock
         {
-            public BitVector32 classifications;
-            public record(int[] classes)
-            {
-                classifications = new BitVector32();
-            }
+            public UInt16[][] classifications;
         }
 
         static int NUMBER_RECORDS = 1000000000;
+        static int NUMBER_RECORD_BLOCKS = NUMBER_RECORDS / 16;
         static int[] CLASSIFICATIONS = { 4, 5, 5 };
         static int[] CLASSIFICATION_OFFSETS = { 0, 4, 9};
-        static record[] records;
+        static recordBlock[] records;
+        static UInt16[] bitMasks;
+        static int[] numberOnesLookup;
         
         static void Main(string[] args)
         {
             populateRecords();
+            Console.WriteLine("Starting init");
+            init();
+            Console.WriteLine("Finished init");
             
             Console.WriteLine("First record :" + records[0].classifications.ToString());
             while (true)
@@ -37,6 +39,29 @@ namespace ConsoleApplication1
                 Console.ReadKey();
             }
         }
+
+        static void init()
+        {
+            bitMasks = new UInt16[16];
+            for (int i = 0; i < 16; i ++  )
+            {
+                bitMasks[i] = (UInt16)Math.Pow(2,i);
+            }
+            numberOnesLookup = new int[UInt16.MaxValue];
+            for( UInt16 i = 0; i < UInt16.MaxValue; i++ )
+            {
+                int count = 0;
+                for(  int n = 0; n < 16; n ++ )
+                    if( GetBit(i , n ) )
+                        count ++;
+                numberOnesLookup[i] = count;
+            }
+
+        }
+
+        private static bool GetBit(UInt16 bits, int offset) {
+            return (bits & (1<<offset)) != 0;
+        }
         /**
          *  returns an array of records NUMBER_RECORDS long, with a number of single selection classifications arranged as CLASSIFICATIONS 
          * 
@@ -44,20 +69,22 @@ namespace ConsoleApplication1
         static void populateRecords() 
         {
             Random rand = new Random(DateTime.Now.Millisecond);
-            records = new record[NUMBER_RECORDS];
-            int[] bitMasks = new int[16];
-            for (int i = 0; i < 16; i ++  )
-            {
-                bitMasks[i] = (int)Math.Pow(2,i);
-            }
-            for (int i = 0; i < NUMBER_RECORDS; i++)
-            {
-                records[i] = new record(CLASSIFICATIONS);
+            records = new recordBlock[NUMBER_RECORD_BLOCKS];
 
-                records[i].classifications[bitMasks[CLASSIFICATION_OFFSETS[0] + rand.Next(CLASSIFICATIONS[0])]] = true;
-                records[i].classifications[bitMasks[CLASSIFICATION_OFFSETS[1] + rand.Next(CLASSIFICATIONS[1])]] = true;
-                records[i].classifications[bitMasks[CLASSIFICATION_OFFSETS[2] + rand.Next(CLASSIFICATIONS[2])]] = true;
+            for (int i = 0; i < NUMBER_RECORD_BLOCKS; i++)
+            {
+                records[i] = new recordBlock();
+                records[i].classifications = new UInt16[3][];
+                records[i].classifications[0] = new UInt16[4];
+                records[i].classifications[1] = new UInt16[5];
+                records[i].classifications[2] = new UInt16[5];
 
+                for( int n = 0; n < 16; n ++ )
+                {
+                    records[i].classifications[0][rand.Next(4)] += (UInt16)Math.Pow(2, n);
+                    records[i].classifications[1][rand.Next(5)] += (UInt16)Math.Pow(2, n);
+                    records[i].classifications[2][rand.Next(5)] += (UInt16)Math.Pow(2, n);
+                }
             }
         }
 
@@ -65,23 +92,20 @@ namespace ConsoleApplication1
         {
             int count = 0;
             //The following is a definition of the cell we want, that is, the first option for each classification is true
-            BitVector32 classMap = new BitVector32();
+            int[] classMap = new  int[] {0, 0, 0};
             Stopwatch stopWatch = new Stopwatch();
-            classMap[1] = true;
-            classMap[(int)Math.Pow(2,4)] = true;
-            classMap[(int)Math.Pow(2, 9)] = true;
 
             stopWatch.Start();
-            foreach( record rec in records)
+            foreach( recordBlock rec in records)
             {
-               if (classMap.Data == rec.classifications.Data)
-                    count++;
+               count += numberOnesLookup[rec.classifications[0][0] &
+                                         rec.classifications[1][0] &
+                                         rec.classifications[2][0]];
             }
 
             stopWatch.Stop();
             Console.WriteLine(stopWatch.ElapsedMilliseconds);
             return count;
-
         }
     }
 }
